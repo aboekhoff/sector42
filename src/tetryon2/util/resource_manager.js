@@ -22,8 +22,8 @@ function get(options) {
 export default class ResourceManager {
   constructor(options={}) {
     this.path  = options.path || ""
-    
-    this.cache = options.byName || {} 
+
+    this.cache = options.byName || {}
     this.urls  = {}
 
     this.previousManager = this.previousManager || null
@@ -42,19 +42,19 @@ export default class ResourceManager {
     if (url == null) { url = name }
 
     if (this.urls[url]) {
-      this.cache[name] = url 
-      return 
+      this.cache[name] = url
+      return
     }
 
     if (this.previousManager && this.previousManager.urls[url]) {
       this.storeResource(name, url, this.previousManager.urls[url])
-      return 
+      return
     }
 
     if (/.+\.(png|bmp|gif)/.test(url)) {
       this.loadImage(name, url)
-      return 
-    } 
+      return
+    }
 
     else {
       this.loadFile(name, url)
@@ -66,9 +66,10 @@ export default class ResourceManager {
     this.loading.push(url);
     var img = new Image();
     img.onload = function() {
-    this.urls[url] = img;
-    this.cache[name] = url;
-    this.resourceDidLoad()
+      this.urls[url] = img;
+      this.cache[name] = url;
+      this.resourceDidLoad()
+    }
   }
 
   loadFile(name, url) {
