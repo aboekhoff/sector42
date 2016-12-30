@@ -1,5 +1,5 @@
 import PIXI from 'pixi.js'
-import ObjectPool from 'tetryon2/util/object_pool'
+import ObjectPool from './tetryon2/util/object_pool'
 
 export default class Renderer {
   constructor(options={}) {

@@ -1,6 +1,4 @@
-import Game from 'tetryon2/game'
-import Engine from 'tetryon2/engine'
-import Input from 'tetryon2/input'
+import { Game, Engine, Input } from './tetryon2'
 import PIXI from 'pixi.js'
 
 import { Duration, Transform, Velocity, Force, Thruster, Sprite,
