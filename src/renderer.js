@@ -26,11 +26,8 @@ export default class Renderer {
     this.renderer.render(this.stage)
   }
 
-
-
   initSprites() {
-    for (let url in this.assets) {
-      const name = this.assets[url].name
+    this.assets.forEach(({name, url}) => {
       const texture = PIXI.loader.resources[name].texture
       const pc = this.particleContainers[name] = new PIXI.ParticleContainer(
         15000,
@@ -43,8 +40,6 @@ export default class Renderer {
         key,
         allocate: (i) => {
           const sprite = new PIXI.Sprite(texture)
-          sprite.anchor.x = 0.5
-          sprite.anchor.y = 0.5
           sprite.scale.x = 0
           sprite.scale.y = 0
           sprite[key] = i
@@ -56,7 +51,7 @@ export default class Renderer {
           sprite.scale.y = 0
         }
       })
-    }
+    })
   }
 
   requestFullScreen() {
@@ -67,21 +62,27 @@ export default class Renderer {
     else if (de.msRequestFullScreen) { de.msRequestFullScreen() }
   }
 
-  init(callback) {
-    document.body.appendChild(this.renderer.view)
+  resize() {
+    const { innerWidth, innerHeight } = window
+    this.dimensions.width = innerWidth,
+    this.dimensions.height = innerHeight,
+    this.renderer.resize(innerWidth, innerHeight)
+    this.stage.position.x = innerWidth / 2
+    this.stage.position.y = innerHeight / 2
+  }
 
-    window.addEventListener('resize', () => {
-      this.dimensions.width = window.innerWidth,
-      this.dimensions.height = window.innerHeight,
-      this.renderer.resize(window.innerWidth, window.innerHeight)
-    })
+  init(callback) {
+    // this.renderer.roundPixels = true
+    document.body.appendChild(this.renderer.view)
+    window.addEventListener('resize', this.resize.bind(this))
+    this.resize()
 
     var loader = PIXI.loader
 
-    for (let url in this.assets) {
-      const name = this.assets[url].name
+    this.assets.forEach(({name, url}) => {
+      console.log(name, url)
       loader.add(name, url)
-    }
+    })
 
     loader.once('complete', () => {
       this.initSprites()

@@ -1,19 +1,45 @@
 import {
   Transform,
+  Physics,
   Force,
   Velocity,
   Duration,
+  Camera,
+  Collidable,
+  Collider,
+  CollisionInfo,
   Sprite,
   Thruster,
-  ShieldBurst,
+  ParticleCannon,
   FollowControl,
   ShipControl,
   ShipSpecs,
+  Pulse,
   PlayerControl,
 } from './components'
 
-import { game, engine, renderer } from './game'
-import { randomFloat, randomInt, RGB, randomRGB, cos, sin, min, atan2, abs, PI, TAU } from './math'
+import { CannonParticle, Explosion, ImpactPulse } from './actors'
+
+import { world, game, engine, renderer, qt } from './game'
+import { randomFloat, randomInt, RGB, randomRGB, lerp, cos, sin, min, max, atan2, abs, PI, TAU } from './math'
+
+const kill = (entity) => {
+  const d = entity.get(Duration)
+  if (d) { d.timeRemaining = 0 } else { entity.set(Duration, 0) }
+}
+
+export const timing = {
+  elapsedTime: 0,
+  maxTimeStep: 64,
+  timeScale: 1,
+  deltaTime: 0,
+  run: function() {
+    this.elapsedTime += game.time.elapsed
+    const deltaTime = Math.min(this.elapsedTime, this.maxTimeStep)
+    this.elapsedTime -= deltaTime
+    this.deltaTime = deltaTime * this.timeScale
+  }
+}
 
 export const playerControl = {
   dependencies: [PlayerControl, ShipControl],
@@ -22,7 +48,37 @@ export const playerControl = {
     sc.accelerating = game.input.buttons.thrust.isDown()
     sc.rotatingRight = game.input.buttons.rotateRight.isDown()
     sc.rotatingLeft = game.input.buttons.rotateLeft.isDown()
-    sc.shieldBursting = game.input.buttons.shieldBurst.isDown()
+    sc.firingWeapon = game.input.buttons.fire.isDown()
+  }
+}
+
+export const particleCannon = {
+  dependencies: [ShipControl, ParticleCannon, Transform, Velocity],
+  each: function(e) {
+    const sc = e.get(ShipControl)
+    const pc = e.get(ParticleCannon)
+
+    const { ROF, spread, team } = pc
+    const numParticles = pc.numParticles.valueOf()
+
+    if (pc.cooldown > 0) {
+      pc.cooldown = max(0, pc.cooldown - timing.deltaTime)
+    }
+
+    if (!sc.firingWeapon || pc.cooldown > 0) { return }
+
+    pc.cooldown = ROF
+
+    const t = e.get(Transform)
+    const v = e.get(Velocity)
+
+    const step = (spread * 2) / numParticles
+
+    let theta = t.rotation - spread
+    for (let i=0; i<numParticles; i++) {
+      const p = CannonParticle(t.x, t.y, v.x, v.y, theta, team)
+      theta += step
+    }
   }
 }
 
@@ -62,6 +118,97 @@ export const followControl = {
   }
 }
 
+export const collision = {
+  dependencies: [Transform, Collidable, Collider],
+  detectedCollisions: [],
+  all: function({array, length}) {
+    qt.clear()
+
+    for (let i=0; i<length; i++) {
+      const e = array[i]
+      const t = e.get(Transform)
+      const c = e.get(Collidable)
+      const cc = e.get(Collider)
+
+      // console.log(`colliding ${e.id}`)
+      cc.collisions.length = 0
+      cc.x1 = t.x - c.x1
+      cc.x2 = t.x + c.x2
+      cc.y1 = t.y - c.y1
+      cc.y2 = t.y + c.y2
+      qt.insert(cc)
+    }
+
+    const dc = this.detectedCollisions
+    dc.length = 0
+
+    for (let i=0; i<length; i++) {
+      const e = array[i]
+      const cc = e.get(Collider)
+      const result = qt.query(cc)
+      if (result.length > 0) {
+        cc.collisions = result
+        dc.push(cc)
+      }
+    }
+
+    const seen = {}
+
+    for (let i=0; i<dc.length; i++) {
+      const c1 = dc[i]
+      const e1 = engine.db.entity(c1.eid)
+      const ci1 = e1.get(CollisionInfo)
+
+      inner:for (let j=0; j<c1.collisions.length; j++) {
+        const c2 = c1.collisions[j]
+        const e2 = engine.db.entity(c2.eid)
+        const ci2 = e2.get(CollisionInfo)
+
+        // don't check collisions between teammates
+        if (ci1.team === ci2.team) { continue inner}
+
+        const key = e1.id < e2.id ? `${e1.id}_${e2.id}` : `${e2.id}_${e1.id}`
+
+        if (seen[key]) { continue }
+        seen[key] = true
+
+        const v1 = e1.get(Velocity)
+        const p1 = e1.get(Physics)
+        const v2 = e2.get(Velocity)
+        const p2 = e2.get(Physics)
+
+        v2.x += (v1.x * p1.mass) * 0.05
+        v1.x -= (v1.x * p2.mass) * 0.05
+
+        v2.y += (v1.y * p1.mass) * 0.05
+        v1.y -= (v1.y * p2.mass) * 0.05
+
+        v1.x += (v2.x * p2.mass) * 0.05
+        v2.x -= (v2.x * p1.mass) * 0.05
+
+        v1.y += (v2.y * p2.mass) * 0.05
+        v2.y -= (v2.y * p1.mass) * 0.05
+
+        ci1.hitPoints -= ci2.damage
+        ci2.hitPoints -= ci1.damage
+
+        if (ci1.damage > 0) ImpactPulse(e2)
+        if (ci2.damage > 0) ImpactPulse(e1)
+      }
+    }
+  }
+}
+
+export const postCollision = {
+  dependencies: [CollisionInfo],
+  each: function(e) {
+    const ci = e.get(CollisionInfo)
+    if (ci.hitPoints > 0) { return }
+    kill(e)
+    if (e.get(ShipSpecs)) Explosion(e)
+  }
+}
+
 export const shipControl = {
   dependencies: [ShipControl, Transform, ShipSpecs, Force],
   each: function(e) {
@@ -71,7 +218,7 @@ export const shipControl = {
     const transform = e.get(Transform)
 
     if (control.accelerating) {
-      const impulse = specs.thrust / specs.mass
+      const impulse = specs.thrust
       const x = Math.cos(transform.rotation)
       const y = Math.sin(transform.rotation)
       force.x += x * impulse
@@ -79,56 +226,20 @@ export const shipControl = {
     }
 
     if (control.rotatingRight) {
-      transform.rotation += specs.rotationSpeed * game.time.elapsed
+      specs.rotationalVelocity += specs.rotationalAcceleration * timing.deltaTime
+      specs.rotationalVelocity = min(specs.rotationalVelocity, specs.maxRotationalVelocity)
+      transform.rotation += specs.rotationalVelocity * timing.deltaTime
+    } else if (control.rotatingLeft) {
+      specs.rotationalVelocity -= specs.rotationalAcceleration * timing.deltaTime
+      specs.rotationalVelocity = max(specs.rotationalVelocity, -specs.maxRotationalVelocity)
+      transform.rotation += specs.rotationalVelocity * timing.deltaTime
+    } else {
+      specs.rotationalVelocity = 0
     }
 
-    if (control.rotatingLeft) {
-      transform.rotation -= specs.rotationSpeed * game.time.elapsed
-    }
+    while (transform.rotation < -PI) { transform.rotation += TAU }
+    while (transform.rotation > PI) { transform.rotation -= TAU }
 
-    if (transform.rotation < -PI) { transform.rotation += TAU }
-    else if (transform.rotation > PI) { transform.rotation -= TAU }
-
-  }
-}
-
-export const shieldBurst = {
-  dependencies: [ShieldBurst, ShipControl, Transform, Velocity],
-  each: function(e) {
-    const sc = e.get(ShipControl)
-    if (!sc.shieldBursting) { return }
-
-    const t = e.get(Transform)
-    const v = e.get(Velocity)
-
-    const {
-      minParticles,
-      maxParticles,
-      minForce,
-      maxForce,
-      minDuration,
-      maxDuration
-    } = e.get(ShieldBurst)
-
-    const numParticles = randomInt(minParticles, maxParticles)
-    const force = randomFloat(minForce, maxForce)
-    const duration = randomInt(minDuration, maxDuration)
-
-    const step = TAU / numParticles
-    let theta = -PI + randomFloat(0, step)
-
-    for (let i=0; i<numParticles; i++) {
-      const dx = cos(theta)
-      const dy = sin(theta)
-      theta += step
-
-      engine.db.entity()
-        .set(Sprite, 'particle')
-        .set(Transform, t.x + (dx * t.scale), t.y + (dy * t.scale), 0, 0.04 * t.scale)
-        .set(Velocity, v.x, v.y)
-        .set(Force, dx * (force * t.scale), dy * (force * t.scale))
-        .set(Duration, duration)
-    }
   }
 }
 
@@ -137,21 +248,27 @@ export const thruster = {
   each: function(e) {
     const c = e.get(ShipControl)
     if (!c.accelerating) { return }
-    const numParticles = randomInt(2, 6)
+
     const t = e.get(Transform)
     const v = e.get(Velocity)
+
+    const numParticles = randomInt(1, 2)
+    const startX = t.x + (Math.cos(t.rotation + Math.PI) * 10 * t.scale)
+    const startY = t.y + (Math.sin(t.rotation + Math.PI) * 10 * t.scale)
+
     for (var i=0; i < numParticles; i++) {
-      const theta = t.rotation + PI + randomFloat(-PI/6 * t.scale, PI/6 * t.scale)
+      const theta = t.rotation + PI + randomFloat(-PI/12 * t.scale, PI/12 * t.scale)
       const x = cos(theta)
       const y = sin(theta)
-      const speed = randomFloat(0.1, 0.3) * t.scale
+      const impulse = randomFloat(0.2, 0.3) * (t.scale)
 
       engine.db.entity()
-        .set(Transform, t.x + Math.cos(t.rotation + Math.PI) * 20 *t.scale, t.y + Math.sin(t.rotation + Math.PI) * 20 * t.scale, 0, 0.03 * t.scale)
+        .set(Transform, startX, startY, 0, 0.05 * t.scale)
         .set(Velocity, v.x, v.y)
-        .set(Force, x * speed, y * speed)
-        .set(Sprite, 'particle', 0.02, 0.02)
-        .set(Duration, randomInt(50, 150))
+        .set(Force, x * impulse, y * impulse)
+        .set(Physics, 1, 0)
+        .set(Sprite, 'particle')
+        .set(Duration, randomInt(100, 200))
     }
   }
 }
@@ -160,43 +277,121 @@ export const duration = {
   dependencies: [Duration],
   each: function(e) {
     const d = e.get(Duration)
-    d.timeRemaining -= game.time.elapsed
+    d.timeRemaining -= timing.deltaTime
     if (d.timeRemaining <= 0) {
       e.dispose()
     }
   }
 }
 
-const TOP_SPEED = 0.4
-const FRICTION = 0.995
+export const pulse = {
+  dependencies: [Transform, Pulse],
+  each: function(e) {
+    const t = e.get(Transform)
+    const p = e.get(Pulse)
+    const delta = timing.deltaTime * p.rate
+    let scale = t.scale + delta
 
-export const physics = {
-  dependencies: [Transform, Velocity, Force],
+    if (scale > p.max) {
+      p.rate *= - 1
+      scale -= scale - p.max
+    }
+
+    else if (scale < p.min) {
+      p.rate *= -1
+      scale += p.min - scale
+    }
+
+    t.scale = scale
+  }
+}
+
+export const force = {
+  dependencies: [Physics, Velocity, Force],
   each: function(e) {
     const f = e.get(Force)
     const v = e.get(Velocity)
+    const p = e.get(Physics)
+
+    v.x += (f.x / p.mass)
+    v.y += (f.y / p.mass)
+
+    f.x = 0
+    f.y = 0
+
+    v.x *= (1 - p.friction)
+    v.y *= (1 - p.friction)
+  }
+}
+
+export const motion = {
+  dependencies: [Transform, Velocity],
+  each: function(e) {
     const t = e.get(Transform)
+    const v = e.get(Velocity)
 
-    v.x *= FRICTION
-    v.y *= FRICTION
+    t.x += v.x * timing.deltaTime
+    t.y += v.y * timing.deltaTime
 
-    v.x += f.x; f.x = 0
-    v.y += f.y; f.y = 0
-
-    // v.x = min(v.x, TOP_SPEED)
-    // v.y = min(v.y, TOP_SPEED)
-
-    t.x += v.x * game.time.elapsed
-    t.y += v.y * game.time.elapsed
-
-    const w = renderer.dimensions.width
-    const h = renderer.dimensions.height
+    const w = world.width
+    const h = world.height
 
     if (t.x < 0) { t.x = 0; v.x *= -1 }
     else if (t.x > w) { t.x = w; v.x *= -1 }
 
     if (t.y < 0) { t.y = 0; v.y *= -1 }
     else if (t.y > h) { t.y = h; v.y *= -1 }
+  }
+}
+
+export const camera = {
+  dependencies: [Camera, Velocity, Transform],
+  each: function(e) {
+    const c = e.get(Camera)
+    const t = e.get(Transform)
+    const v = e.get(Velocity)
+    const { smoothing, maxDelta } = c
+    const s = (timing.deltaTime * (smoothing / 1000))
+    const p = renderer.stage.pivot
+
+    const dx1 = c.dx || 0
+    const dy1 = c.dy || 0
+
+    // interpolated coords
+    const x = p.x + (t.x - p.x) * s
+    const y = p.y + (t.y - p.y) * s
+
+    // distance from object to interpolated coords
+    const dx2 = t.x - x
+    const dy2 = t.y - y
+
+    // change in distance from object compared to previous frame
+    const ddx = dx2 - dx1
+    const ddy = dy2 - dy1
+
+    let dx = dx2
+    let dy = dy2
+
+    if (abs(ddx) > maxDelta) {
+      dx = dx2 > dx1 ? dx1 + maxDelta : dx1 - maxDelta
+    }
+
+    if (abs(ddy) > maxDelta) {
+      dy = dy2 > dy1 ? dy1 + maxDelta : dy1 - maxDelta
+    }
+
+    const epsilon = 0.001
+    if (abs(dx) < epsilon) dx = 0
+    if (abs(dy) < epsilon) dy = 0
+
+    // console.log({dx, dy})
+
+    p.x = t.x - dx
+    p.y = t.y - dy
+
+    c.dx = dx
+    c.dy = dy
+
   }
 }
 

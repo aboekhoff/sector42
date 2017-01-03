@@ -29,7 +29,9 @@
   },
   "dependencies": {
     "babel-polyfill": "^6.3.14",
+    "howler": "^2.0.2",
     "pixi.js": "^3.0.9",
+    "react": "^15.4.1",
     "tetryon2": "*"
   }
 }

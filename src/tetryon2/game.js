@@ -21,6 +21,7 @@ export default class Game {
       if (this.running) {
         this.time.update()
         this.tick()
+        this.input.update()
         requestAnimationFrame(loop)
       }
     }

@@ -28,3 +28,35 @@ export const max = Math.max
 export const cos = Math.cos
 export const sin = Math.sin
 export const atan2 = Math.atan2
+
+export const lerp = (a, b, s) => {
+  return a + (b - a) * s
+}
+
+// utility to specify random float ranges in place of numbers
+export class FloatRange {
+  constructor (min, max) {
+    this.min = min
+    this.max = max
+  }
+
+  toString() { return '' + this.valueOf() }
+
+  valueOf() {
+    return randomFloat(this.min, this.max)
+  }
+}
+
+// utility to specify random int ranges in place of numbers
+export class IntRange {
+  constructor(min, max) {
+    this.min = min
+    this.max = max
+  }
+
+  toString() { return '' + this.valueOf() }
+
+  valueOf() {
+    return randomInt(min, max)
+  }
+}

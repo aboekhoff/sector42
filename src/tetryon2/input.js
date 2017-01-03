@@ -78,6 +78,7 @@ Pointer.prototype.update = function(ports) {
 
 var Keyboard = {};
 
+Keyboard.SPACE = (' ').charCodeAt(0)
 Keyboard.BACKSPACE = 8;
 Keyboard.TAB = 9;
 Keyboard.ENTER = 13;

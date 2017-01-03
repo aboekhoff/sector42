@@ -4,25 +4,26 @@ import ObjectPool from './object_pool'
 // refactor to accept rectangles passed as arrays
 
 export default function Quadtree(level, x1, x2, y1, y2) {
-  this.level = level;
-  this.x1 = x1;
-  this.x2 = x2;
-  this.y1 = y1;
-  this.y2 = y2;
-  this.objects = [];
-  this.stuckObjects = [];
-  this.nodes = [null, null, null, null];
-  if (this.id == null) { this.id = 0 }
+  this.level = level
+  this.x1 = x1
+  this.x2 = x2
+  this.y1 = y1
+  this.y2 = y2
+  this.objects = []
+  this.stuckObjects = []
+  this.nodes = [null, null, null, null]
 }
 
 Quadtree.objectPool = new ObjectPool({
-  allocate(i) { 
+  key: 'id',
+
+  allocate(i) {
     const qt = new Quadtree()
-    qt.id = i 
+    qt.id = i
     return qt
   },
 
-  customize(instance, params) {
+  customize(instance, ...params) {
     Quadtree.apply(instance, params)
   },
 
@@ -35,6 +36,14 @@ Quadtree.MAX_LEVELS = 5;
 
 Quadtree.create = function(width, height) {
   return this.objectPool.create(0, 0, width, 0, height);
+}
+
+Quadtree.prototype.resize = function(width, height) {
+  this.clear()
+  this.x1 = 0
+  this.x2 = width
+  this.y1 = 0
+  this.y2 = height
 }
 
 Quadtree.prototype.clear = function() {
@@ -50,7 +59,7 @@ Quadtree.prototype.clear = function() {
 
 Quadtree.prototype.dispose = function() {
   this.clear();
-  this.constructor.objectPool.dispose(this);
+  this.constructor.objectPool.dispose(this.id);
 }
 
 Quadtree.prototype.split = function() {
@@ -144,14 +153,14 @@ Quadtree.prototype._query = function(rect, res) {
 
   for (var i=0, ii=this.stuckObjects.length; i<ii; i++) {
     var o = this.stuckObjects[i];
-    if (rect.entityId != o.entityId && intersects(rect, o)) {
+    if (rect.eid != o.eid && intersects(rect, o)) {
       res.push(o);
     }
   }
 
   for (var i=0, ii=this.objects.length; i<ii; i++) {
     var o = this.objects[i];
-    if (rect.entityId != o.entityId && intersects(rect, o)) {
+    if (rect.eid != o.eid && intersects(rect, o)) {
       res.push(o);
     }
   }

@@ -20,12 +20,8 @@ export default class DB {
 
     this.Entity = class Entity {
       constructor(id) {
-        if (this.id == null) { this.id = id }
-        if (this.mask == null) {
-          this.mask = new Bitset()
-        } else {
-          this.mask.mutatingReset()
-        }
+        this.id = id
+        this.mask = new Bitset()
       }
 
       get(componentType) {
@@ -50,6 +46,7 @@ export default class DB {
       }
 
       dispose() {
+        // console.log(`disposing ${this.id}`)
         this.mask.eachSetBitIndex((index) => {
           const pool = db.componentTypePools[index]
           pool.dispose(this.id)
@@ -57,11 +54,22 @@ export default class DB {
         db.entityPool.dispose(this.id)
       }
 
+      inspect() {
+        var res = {}
+        db.componentTypes.forEach(ct => {
+          res[ct.name] = this.get(ct)
+        })
+        return res
+      }
+
     }
 
     this.entityPool = new ObjectPool({
       allocate(id) { return new db.Entity(id) },
-      customize(instance) { instance.uid = db.nextEntityUID++ },
+      customize(instance) {
+        instance.uid = db.nextEntityUID++
+        instance.mask.mutatingReset()
+      },
       poolSize: db.entityPoolSize,
       indexSize: db.entityPoolSize,
       key: 'id'

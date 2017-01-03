@@ -1,117 +1,179 @@
 import Game from './tetryon2/game'
 import Engine from './tetryon2/engine'
 import Input from './tetryon2/input'
+import Quadtree from './tetryon2/util/quadtree'
 import PIXI from 'pixi.js'
-
-import { Duration, Transform, Velocity, Force, Thruster, Sprite,
-         ShipControl, FollowControl, PlayerControl, ShipSpecs,
-         ShieldBurst } from './components'
-import { duration, render, physics, thruster, followControl,
-         playerControl, shipControl, shieldBurst } from './systems'
+import { Camera, Duration, Transform, Velocity, Force, Thruster, Sprite,
+         ShipControl, FollowControl, Physics, PlayerControl, ShipSpecs,
+         ParticleCannon, Collidable, Collider, CollisionInfo, Pulse } from './components'
+import { duration, camera, render, force, motion, thruster, followControl,
+         playerControl, shipControl, collision,
+         postCollision, particleCannon, pulse, timing } from './systems'
 import { randomFloat, randomInt, randomRGB, cos, sin, PI } from './math'
 import Renderer from './renderer'
 
-export const assets = {
-  'assets/snow_particle.png': { name: 'particle' },
-  'assets/spaceships/boss1.png': { name: 'boss' },
-  'assets/spaceships/player_ship.png': { name: 'player'},
-  'assets/spaceships/enemy_1.png': { name: 'enemy1' },
-  'assets/spaceships/enemy_2.png': { name: 'enemy2' },
-  'assets/spaceships/enemy_3.png': { name: 'enemy3' }
-}
+import { Fighter, Carrier, Mini, Corsair, Scout } from './actors'
 
-export const renderer = new Renderer({assets})
+export const assets = [
+  {
+    name: 'particle',
+    url: 'assets/snow_particle.png'
+  },
+  {
+    name: 'star',
+    url: 'assets/snow_particle.png'
+  },
+  {
+    name: 'boss',
+    url: 'assets/spaceships/boss1.png',
+  },
+  {
+    name: 'player',
+    url: 'assets/spaceships/player_ship.png',
+  },
+  {
+    name: 'enemy1',
+    url: 'assets/spaceships/enemy_1.png',
+  },
+  {
+    name: 'enemy2',
+    url: 'assets/spaceships/enemy_2.png',
+  },
+  {
+    name: 'enemy3',
+    url: 'assets/spaceships/enemy_3.png',
+  }
+]
+
+export const renderer = window.renderer = new Renderer({assets})
 export const game = window.game = new Game()
 export const engine = window.engine = new Engine()
+export const qt = window.qt = Quadtree.create(window.innerWidth, window.innerHeight)
+
+window.addEventListener('resize', () => {
+  qt.resize(window.innerWidth, window.innerHeight)
+})
+
+export const world = {
+  width: 20000,
+  height: 20000,
+  numStars: 8000,
+}
+
+export const drawStars = () => {
+  const { width, height, numStars } = world
+  const dist = (width * height) / numStars
+
+  const makeStar = (x, y) => {
+    const scale = randomFloat(0.01, 0.02)
+    const e = engine.db.entity()
+      .set(Sprite, 'star')
+      .set(Transform, x, y, 0, scale)
+  }
+
+  // tacks to hold down the map at the edges
+  makeStar(0, 0)
+  makeStar(width, 0)
+  makeStar(width, height)
+  makeStar(0, height)
+
+  for (let i=0; i < numStars; i++) {
+    makeStar(randomInt(0, width), randomInt(0, height))
+  }
+}
 
 function initEngine() {
   engine.addComponentTypes(
     Transform,
     Velocity,
     Force,
+    Camera,
     Duration,
     Thruster,
-    ShieldBurst,
+    ParticleCannon,
+    Physics,
     Sprite,
     FollowControl,
     PlayerControl,
+    Pulse,
     ShipControl,
-    ShipSpecs
+    ShipSpecs,
+    Collidable,
+    Collider,
+    CollisionInfo
   )
 
-  engine.addSystems(
-    duration,
-    followControl,
-    playerControl,
-    shipControl,
-    thruster,
-    shieldBurst,
-    physics,
-    render
-  )
+  engine.addSystem(timing)
+  engine.addSystem(playerControl)
+  engine.addSystem(followControl)
+  engine.addSystem(shipControl)
+  engine.addSystem(thruster)
+  engine.addSystem(particleCannon)
+  engine.addSystem(collision)
+  engine.addSystem(postCollision)
+  engine.addSystem(force)
+  engine.addSystem(render)
+  engine.addSystem(motion)
+  engine.addSystem(camera)
+  engine.addSystem(pulse)
+  engine.addSystem(duration)
 
   game.input.add.button('thrust', Input.Keyboard.UP)
   game.input.add.button('rotateRight', Input.Keyboard.RIGHT)
   game.input.add.button('rotateLeft', Input.Keyboard.LEFT)
-  game.input.add.button('shieldBurst', Input.Keyboard.SPACE)
+  game.input.add.button('fire', Input.Keyboard.SPACE)
 
-  const spriteNames = ['player', 'enemy1', 'enemy2', 'enemy3']
-  const numShips = 25
+  const w = world.width
+  const h = world.height
 
-  const randomShip = () => {
-    const spriteName = spriteNames[randomInt(0, spriteNames.length - 1)]
-    const rotation = randomFloat(0, Math.PI * 2)
-    const speed = randomFloat(0.1, 0.2)
-    engine.db.entity()
-      .set(Sprite, spriteName)
-      .set(Transform, randomFloat(dimensions.width), randomFloat(dimensions.height), rotation + PI/2, 1)
-      .set(Velocity, cos(rotation) * speed, sin(rotation) * speed)
-      .set(Thruster)
-  }
-
-  // for (var i=0; i<numShips; i++) {
-  //   randomShip()
-  // }
-
-  const w = renderer.dimensions.width
-  const h = renderer.dimensions.height
-
-  let e = engine.db.entity()
-    .set(Sprite, 'player')
-    .set(Thruster)
+  let e = Scout(w/2, h/2, 'hero')
     .set(PlayerControl)
-    .set(ShipControl, false, false, false)
-    .set(ShipSpecs, 0.01, 1, 0.007)
-    .set(Transform, w/2, h/2, 0, 1)
-    .set(Velocity, 0, 0)
-    .set(Force, 0, 0)
-    .set(ShieldBurst, 6, 18, 0.2, 0.6, 200, 600)
+    .set(ParticleCannon, PI/128, 3, 32, 'hero')
+    .set(Camera, 1, 1.6)
+
+  console.log(e.inspect().Camera)
 
   let lastId = e.id
   const playerId = e.id
-  const numFollowers = 80
-  console.log(numFollowers)
 
-  const makeFollower = () => {
-    const names = ['enemy1', 'enemy2', 'enemy3']
-
-    e = engine.db.entity()
-      .set(Sprite, names[randomInt(0, 2)])
-      .set(Thruster)
+  const makeFollower = (prototype) => {
+    const follower = prototype(randomFloat(0, w), randomFloat(0, h), 'villain')
       .set(FollowControl, playerId, randomInt(100, 200))
-      .set(ShipControl, false, false, false)
-      .set(ShipSpecs, randomFloat(0.0002, 0.0015), 0.5, 0.007)
-      .set(Transform, randomFloat(0, w), randomFloat(0, h), 0, 0.6)
-      .set(Velocity, 0, 0)
-      .set(Force, 0, 0)
 
-    lastId = e.id
+    lastId = follower.id
+
+    return follower
   }
 
-  for (var i=0; i<numFollowers; i++) {
-    makeFollower()
+  const numMinis = 200
+  const numFighters = 20
+  const numCorsairs = 8
+  const numCarriers = 0
+
+  console.log({
+    numMinis, numCorsairs, numCarriers, numFighters
+  })
+
+  for (var i=0; i<numMinis; i++) {
+    makeFollower(Mini)
   }
 
+  for (var i=0; i<numCorsairs; i++) {
+    makeFollower(Corsair)
+  }
+
+  for (var i=0; i<numCarriers; i++) {
+    makeFollower(Carrier)
+  }
+
+  for (var i=0; i<numFighters; i++) {
+    makeFollower(Fighter)
+  }
+
+  drawStars()
+
+  renderer.stage.pivot.x = world.width/2
+  renderer.stage.pivot.y = world.height/2
 }
 
 function init() {

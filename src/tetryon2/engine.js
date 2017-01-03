@@ -11,7 +11,7 @@ export default class Engine {
     this.systems = []
   }
 
-  addComponentType(componentType, poolSize) {
+  addComponentType(componentType, poolSize=SIZE) {
     this.db.addComponentType(
       componentType,
       componentType.onCreate,
@@ -26,7 +26,24 @@ export default class Engine {
     this.systems.push(system)
   }
 
+  addComponentTypes(...cts) {
+    cts.forEach(ct => {
+      this.addComponentType(ct)
+    })
+  }
+
+  addSystems(...systems) {
+    systems.forEach(sys => {
+      this.addSystem(sys)
+    })
+  }
+
   runSystem(system) {
+    if (!system.predicate) {
+      system.run()
+      return
+    }
+
     const entities = this.db.query(system.predicate)
 
     if (system.before) {
@@ -77,6 +94,7 @@ export default class Engine {
   }
 
   compilePredicate(dependencies) {
+    if (!dependencies) { return null }
     const key = this.db.key
 
     const toBitset = (x) => {
