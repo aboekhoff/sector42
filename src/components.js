@@ -1,4 +1,5 @@
 import { engine, renderer } from './game'
+import { TAU } from './math'
 
 export function Duration(timeRemaining) {
   this.timeRemaining = timeRemaining
@@ -71,9 +72,23 @@ export function Weapon(type, damage) {
   this.damage = damage
 }
 
-console.log("WTFFF")
+const INIT_RVEL = 0.009
+const RACC = 0.0045
+const MAX_RVEL = 0.6
 
-export function ShipSpecs(thrust=1, rotationalAcceleration=0.00001, maxRotationalVelocity=Math.PI/250, rotationalVelocity=0) {
+console.log({
+  INIT_RVEL,
+  RACC,
+  MAX_RVEL,
+})
+
+export function ShipSpecs(
+  thrust=1,
+  initialRotationalVelocity=TAU/360 * INIT_RVEL,
+  rotationalAcceleration=TAU/360 * RACC,
+  maxRotationalVelocity=TAU/360 * MAX_RVEL,
+  rotationalVelocity=0
+) {
   this.thrust = thrust
   this.rotationalAcceleration = rotationalAcceleration
   this.maxRotationalVelocity = maxRotationalVelocity

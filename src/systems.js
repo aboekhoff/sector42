@@ -20,8 +20,12 @@ import {
 
 import { CannonParticle, Explosion, ImpactPulse } from './actors'
 
-import { world, game, engine, renderer, qt } from './game'
+import { world, game, renderer, qt, audioPlayer } from './game'
 import { randomFloat, randomInt, RGB, randomRGB, lerp, cos, sin, min, max, atan2, abs, PI, TAU } from './math'
+
+import { cannonSound } from './audio'
+
+import PlayState from './states/play_state'
 
 const kill = (entity) => {
   const d = entity.get(Duration)
@@ -38,6 +42,43 @@ export const timing = {
     const deltaTime = Math.min(this.elapsedTime, this.maxTimeStep)
     this.elapsedTime -= deltaTime
     this.deltaTime = deltaTime * this.timeScale
+  }
+}
+
+export const audio = {
+  dependencies: [CollisionInfo],
+  timeBetweenUpdates: 1000,
+  elapsedTime: 0,
+  currentTheme: null,
+  all: function(es) {
+    this.elapsedTime += timing.deltaTime
+    if (this.elapsedTime < this.timeBetweenUpdates) { return }
+    this.elapsedTime -= this.timeBetweenUpdates
+
+    let count = 0
+
+    for (let i=0; i<es.length; i++) {
+      const e = es.array[i]
+      const c = e.get(CollisionInfo)
+      if (c.team !== 'hero' && c.damage === 0) {
+        count += 1
+      }
+    }
+
+    let theme = null
+
+    if (count <= 10) {
+      theme = 'to_eris'
+    }
+    else {
+      theme = 'ultraspeed'
+    }
+
+    if (theme != this.currentTheme) {
+      this.currentTheme = theme
+      audioPlayer.setTheme(theme)
+    }
+
   }
 }
 
@@ -79,12 +120,14 @@ export const particleCannon = {
       const p = CannonParticle(t.x, t.y, v.x, v.y, theta, team)
       theta += step
     }
+    cannonSound.play()
   }
 }
 
 export const followControl = {
   dependencies: [FollowControl, ShipControl, Transform],
   each: function(e) {
+    const engine = game.getEngine()
     const fc = e.get(FollowControl)
     const sc = e.get(ShipControl)
     const ft = e.get(Transform)
@@ -122,6 +165,7 @@ export const collision = {
   dependencies: [Transform, Collidable, Collider],
   detectedCollisions: [],
   all: function({array, length}) {
+    const engine = game.getEngine()
     qt.clear()
 
     for (let i=0; i<length; i++) {
@@ -192,8 +236,8 @@ export const collision = {
         ci1.hitPoints -= ci2.damage
         ci2.hitPoints -= ci1.damage
 
-        if (ci1.damage > 0) ImpactPulse(e2)
-        if (ci2.damage > 0) ImpactPulse(e1)
+        if (ci1.damage > 0) ImpactPulse(e1, e2)
+        if (ci2.damage > 0) ImpactPulse(e2, e1)
       }
     }
   }
@@ -246,6 +290,7 @@ export const shipControl = {
 export const thruster = {
   dependencies: [Thruster, Transform, Velocity, ShipControl],
   each: function(e) {
+    const engine = game.getEngine()
     const c = e.get(ShipControl)
     if (!c.accelerating) { return }
 
@@ -411,5 +456,24 @@ export const render = {
 
   after: function() {
     renderer.render()
+  }
+}
+
+export const titleScreen = {
+  selection: null,
+  run() {
+    if (game.input.buttons.start.justPressed()) {
+      game.pushState(new PlayState(null, game.getEngine().db))
+    }
+    renderer.render(renderer.stage)
+  }
+}
+
+export const pauseScreen = {
+  run() {
+    if (game.input.buttons.start.justPressed()) {
+      game.popState()
+    }
+    renderer.render(renderer.stage)
   }
 }

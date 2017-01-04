@@ -7,21 +7,50 @@ export default function Input() {
   this.pointers = {};
   this.pointerList = [];
   this.add = new InputMethodFactory(this);
+  this.remove = new InputMethodDisposal(this);
 }
 
 function InputMethodFactory(input) {
   this.input = input;
 }
 
+function InputMethodDisposal(input) {
+  this.input = input;
+}
+
+InputMethodDisposal.prototype.button = function(name) {
+  this.input.removeButton(this.input.buttons[name])
+}
+
+InputMethodDisposal.prototype.pointer = function(name) {
+  this.input.removePointer(this.input.pointers[name])
+}
+
+Input.prototype.removeButton = function(button) {
+  const index = this.buttonList.indexOf(button)
+  if (index != -1) {
+    this.buttonList.splice(index, 1)
+    this.buttons[button.name] = null
+  }
+}
+
+Input.prototype.removePointer = function(pointer) {
+  const index = this.pointerList.indexOf(button)
+  if (index != -1) {
+    this.pointerList.splice(index, 1)
+    this.pointers[pointer.name] = null
+  }
+}
+
 InputMethodFactory.prototype.button = function(name, port) {
-  var button = new Button('' + port);
+  var button = new Button('' + port, this.input);
   this.input.buttons[name] = button;
   this.input.buttonList.push(button);
   return button;
 }
 
 InputMethodFactory.prototype.pointer = function(name, port) {
-  var pointer = new Pointer('' + port);
+  var pointer = new Pointer('' + port, this.input);
   this.input.pointers[name] = pointer;
   this.input.pointerList.push(pointer);
   return pointer;
@@ -36,7 +65,8 @@ Input.prototype.update = function() {
   }
 }
 
-function Button(port) {
+function Button(port, parent) {
+  this.parent = parent
   this.port = port;
   this.lastState = false;
   this.state = false;
@@ -54,14 +84,19 @@ Button.prototype.isDown = function() {
 }
 
 Button.prototype.justPressed = function() {
-  return this.lastState = false && this.state == true;
+  return !this.lastState && this.state;
 }
 
 Button.prototype.justReleased = function() {
-  return this.lastState = true && this.state == false;
+  return this.lastState && !this.state;
 }
 
-function Pointer(port) {
+Button.prototype.remove = function() {
+  this.input.removeButton(this)
+}
+
+function Pointer(port, input) {
+  this.input = input
   this.port = port;
   this.lastPosition = {x: 0, y: 0};
   this.position = {x: 0, y: 0};
@@ -75,6 +110,9 @@ Pointer.prototype.update = function(ports) {
   this.position.y = ports[this.port].y;
 }
 
+Pointer.prototype.remove = function() {
+  this.input.removePointer(this)
+}
 
 var Keyboard = {};
 
@@ -154,42 +192,42 @@ Input.prototype.addCallbacks = function() {
     return false;
   }
 
-  window.onkeydown = function(e) {
+  window.addEventListener('keydown', function(e) {
     input.ports[e.which] = true;
     return stopEvent(e);
-  }
+  })
 
-  window.onkeyup = function(e) {
+  window.addEventListener('keyup', function(e) {
     input.ports[e.which] = false;
     return stopEvent(e);
-  }
+  })
 
-  window.onmousemove = function(e) {
+  window.addEventListener('mousemove', function(e) {
     input.ports['MOUSE'] = { x: e.clientX, y: e.clientY };
     return stopEvent(e);
-  }
+  })
 
-  window.onmousedown = function(e) {
+  window.addEventListener('mousedown', function(e) {
     switch (e.button) {
       case 0: input.ports['MOUSE_0'] = true;
       case 1: input.ports['MOUSE_1'] = true;
       case 2: input.ports['MOUSE_2'] = true;
     }
     return stopEvent(e);
-  }
+  })
 
-  window.onmouseup = function(e) {
+  window.addEventListener('mouseup', function(e) {
     switch (e.button) {
       case 0: input.ports['MOUSE_0'] = false;
       case 1: input.ports['MOUSE_1'] = false;
       case 2: input.ports['MOUSE_2'] = false;
     }
     return stopEvent(e);
-  }
+  })
 
-  window.oncontextmenu = function(e) {
+  window.addEventListener('contextmenu', function(e) {
     return stopEvent(e);
-  }
+  })
 }
 
 Input.Keyboard = Keyboard;

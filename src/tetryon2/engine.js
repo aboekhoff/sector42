@@ -39,6 +39,10 @@ export default class Engine {
   }
 
   runSystem(system) {
+    if (system.when && !system.when()) {
+      return
+    }
+
     if (!system.predicate) {
       system.run()
       return

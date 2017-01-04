@@ -9,6 +9,7 @@ export default class Game {
     this.running = false
     this.input = new Input()
     this.input.addCallbacks()
+    this.stateChange = null
   }
 
   start() {
@@ -18,16 +19,25 @@ export default class Game {
     this.time.reset()
 
     const loop = () => {
+      if (this.stateChange) {
+        this.performStateChange()
+      }
+
       if (this.running) {
         this.time.update()
         this.tick()
         this.input.update()
-        requestAnimationFrame(loop)
       }
+
+      requestAnimationFrame(loop)
     }
 
     requestAnimationFrame(loop)
 
+  }
+
+  getEngine() {
+    return this.state.engine
   }
 
   stop() {
@@ -39,19 +49,48 @@ export default class Game {
     this.state.engine.runActiveSystems()
   }
 
-  setState(state) {
-    if (this.state) { this.state.destroy() }
-    this.state = state
+  performStateChange() {
+    const [action, nextState] = this.stateChange
+    this.stateChange = null
+
+    console.log(action, nextState)
+
+    switch (action) {
+      case 'REPLACE':
+        if (this.state && this.state.dispose) { this.state.dispose() }
+        if (nextState.init) nextState.init()
+        this.state = nextState
+        return
+
+      case 'PUSH':
+        if (this.state) {
+          if (this.state.pause) this.state.pause()
+          this.stack.push(nextState)
+        }
+        if (nextState.init) nextState.init()
+        this.state = nextState
+        return
+
+      case 'POP':
+        if (this.state && this.state.dispose) this.state.dispose()
+        this.state = this.stack.pop()
+        if (this.state.resume) this.state.resume()
+        return
+    }
+  }
+
+  replaceState(state) {
+    this.stateChange = ['REPLACE', state]
+
   }
 
   pushState(state) {
-    if (this.state) { this.stack.push(state) }
-    this.state = state
+    this.stateChange = ['PUSH', state]
+
   }
 
   popState() {
-    this.state = this.stack.pop()
+    this.stateChange = ['POP']
   }
-
 
 }
